@@ -55,9 +55,17 @@ A SaaS application that allows users to chat with their Twitter bookmarks using 
 
 ### AI & RAG
 - **Agent Framework**: Agno v2.3.1
-- **LLM Provider**: Anthropic Claude Sonnet 4.5 (primary) / OpenAI / Groq
-- **Model**: claude-sonnet-4-5 (latest, Sep 2025 - best for coding & agents)
-- **Embeddings**: OpenAI text-embedding-3-small or Anthropic embeddings
+- **Primary LLM Provider**: OpenRouter (unified access to multiple models)
+- **Recommended Models** (cost-effective for RAG):
+  - `qwen/qwen3-max` - $1.2/$6 per 1M tokens (optimized for RAG!)
+  - `google/gemini-2.5-flash` - Price-performance leader
+  - `qwen/qwen3-coder:free` - FREE tier for development
+  - `google/gemini-1.5-flash` - Google Gemini (budget-friendly)
+- **Alternative Providers**:
+  - Google Gemini (direct) - `gemini-1.5-flash` / `gemini-2.5-flash`
+  - Hyperbolic - Ultra-low latency inference
+  - OpenAI - For premium tier users
+- **Embeddings**: OpenAI text-embedding-3-small ($0.02/1M tokens)
 - **RAG**: Agno's built-in agentic RAG (automatic when knowledge is provided)
 - **Vector Search**: PgVector with hybrid search (semantic + keyword)
 
@@ -164,10 +172,12 @@ twitter-bookmarks-saas/
 - id, session_id, role, content, created_at
 ```
 
-#### B. Agno Agent Setup (Updated 2025 Syntax)
+#### B. Agno Agent Setup (Updated 2025 Syntax with Cost-Effective Models)
+
+**Option 1: OpenRouter (Recommended - Best Cost/Performance)**
 ```python
 from agno.agent import Agent
-from agno.models.anthropic import Claude
+from agno.models.openrouter import OpenRouter
 from agno.knowledge.knowledge import Knowledge
 from agno.vectordb.pgvector import PgVector, SearchType
 from agno.storage.agent.postgres import PgAgentStorage
@@ -188,10 +198,15 @@ knowledge_base = Knowledge(
     num_documents=5,  # Top-k retrieval
 )
 
-# Chat agent with RAG using Claude Sonnet 4.5
+# Chat agent with RAG using OpenRouter
 chat_agent = Agent(
     name="Twitter Bookmarks Assistant",
-    model=Claude(id="claude-sonnet-4-5"),  # Latest model (Sep 2025)
+    model=OpenRouter(
+        id="qwen/qwen3-max",  # $1.2/$6 per 1M - optimized for RAG!
+        # Alternative options:
+        # id="google/gemini-2.5-flash",  # Price-performance leader
+        # id="qwen/qwen3-coder:free",    # FREE for development
+    ),
     knowledge=knowledge_base,
     storage=PgAgentStorage(table_name="agent_sessions", db_url=db_url),
     read_chat_history=True,  # Maintains conversation context
@@ -201,12 +216,38 @@ chat_agent = Agent(
 )
 ```
 
+**Option 2: Google Gemini Direct (Also Cost-Effective)**
+```python
+from agno.agent import Agent
+from agno.models.google import Gemini
+from agno.knowledge.knowledge import Knowledge
+from agno.vectordb.pgvector import PgVector, SearchType
+
+db_url = "postgresql+psycopg://ai:ai@localhost:5532/ai"
+
+vector_db = PgVector(
+    table_name="twitter_bookmarks",
+    db_url=db_url,
+    search_type=SearchType.hybrid,
+)
+
+knowledge_base = Knowledge(vector_db=vector_db, num_documents=5)
+
+# Chat agent with Gemini
+chat_agent = Agent(
+    name="Twitter Bookmarks Assistant",
+    model=Gemini(id="gemini-2.5-flash"),  # Fast & cheap
+    knowledge=knowledge_base,
+    markdown=True,
+)
+```
+
 #### C. Advanced: Async Agent Usage (Recommended for Production)
 
 ```python
 import asyncio
 from agno.agent import Agent
-from agno.models.anthropic import Claude
+from agno.models.openrouter import OpenRouter
 from agno.knowledge.knowledge import Knowledge
 from agno.vectordb.pgvector import PgVector, SearchType
 
@@ -220,9 +261,9 @@ vector_db = PgVector(
 )
 knowledge_base = Knowledge(vector_db=vector_db)
 
-# Create agent
+# Create agent with OpenRouter
 agent = Agent(
-    model=Claude(id="claude-sonnet-4-5"),
+    model=OpenRouter(id="qwen/qwen3-max"),  # Cost-effective RAG model
     knowledge=knowledge_base,
     markdown=True,
 )
@@ -401,25 +442,59 @@ DELETE /api/chat/sessions/:id       # Delete session
    - SQL injection prevention (SQLAlchemy ORM)
    - XSS protection
 
-## 💰 Monetization Strategy
+## 💰 Monetization Strategy & Cost Analysis
 
-### Tiers
-1. **Free Tier**
+### Cost Breakdown (Using OpenRouter)
+
+**Per User Monthly Costs (Estimated)**:
+- **Free Tier** (50 messages/month):
+  - Model: `qwen/qwen3-coder:free` - $0/month
+  - Embeddings: ~1,000 bookmarks @ $0.02/1M tokens ≈ $0.001
+  - Database: Minimal (shared PostgreSQL)
+  - **Total: ~$0.001/user** 🎯 Highly profitable!
+
+- **Pro Tier** (500 messages/month):
+  - Model: `qwen/qwen3-max` @ $1.2/$6 per 1M tokens
+  - Average usage: ~200K tokens input, 100K tokens output
+  - Cost: (200K × $1.2 + 100K × $6) / 1M = $0.24 + $0.60 = **$0.84/month**
+  - Embeddings: ~$0.01
+  - **Total: ~$0.85/user** → **89% margin at $9/month!** 🚀
+
+- **Team Tier** (Unlimited):
+  - Model: `google/gemini-2.5-flash` (faster, scalable)
+  - Average 2,000 messages/user/month
+  - Cost: ~$2-3/user/month
+  - **Total: ~$3/user** → **90% margin at $29/month!** 💰
+
+### Pricing Tiers
+
+1. **Free Tier** - $0/month
    - Up to 100 bookmarks
    - 50 chat messages/month
-   - Basic RAG
+   - Basic RAG with free model
+   - Community support
 
-2. **Pro Tier** ($9/month)
+2. **Pro Tier** - $9/month
    - Unlimited bookmarks
-   - Unlimited chat messages
-   - Advanced RAG with GPT-4
-   - Priority support
+   - 500 chat messages/month
+   - Advanced RAG with Qwen3-Max
+   - Email support
+   - Export features
 
-3. **Team Tier** ($29/month)
+3. **Team Tier** - $29/month
    - Everything in Pro
+   - Unlimited messages
+   - Faster model (Gemini 2.5 Flash)
    - Shared bookmarks
    - Team collaboration
    - API access
+   - Priority support
+
+4. **Enterprise** - Custom pricing
+   - Claude Sonnet 4.5 (premium model)
+   - Custom integrations
+   - Dedicated support
+   - SLA guarantees
 
 ## 📊 Success Metrics
 
@@ -451,9 +526,19 @@ DELETE /api/chat/sessions/:id       # Delete session
 DATABASE_URL=postgresql+psycopg://ai:ai@localhost:5532/ai
 PGVECTOR_URL=postgresql+psycopg://ai:ai@localhost:5532/ai
 
-# AI Models
-ANTHROPIC_API_KEY=your_anthropic_api_key_here
+# AI Models (Primary - OpenRouter)
+OPENROUTER_API_KEY=your_openrouter_api_key_here  # Get from openrouter.ai
+OPENROUTER_APP_NAME=TwitterBookmarksChat  # Optional: for tracking
+
+# AI Models (Alternative Providers)
+GOOGLE_API_KEY=your_google_api_key_here  # For Gemini direct
+HYPERBOLIC_API_KEY=your_hyperbolic_key_here  # Optional: Hyperbolic AI
 OPENAI_API_KEY=your_openai_api_key_here  # Optional: for embeddings
+
+# Model Selection (configurable per tier)
+DEFAULT_MODEL=qwen/qwen3-max  # Free tier: qwen3-coder:free
+PRO_MODEL=google/gemini-2.5-flash  # Pro tier
+TEAM_MODEL=anthropic/claude-sonnet-4-5  # Premium option
 
 # JWT Authentication
 JWT_SECRET_KEY=your_super_secret_key_here_change_in_production
@@ -503,9 +588,13 @@ pydantic-settings>=2.1.0
 # CORS & Middleware
 python-cors>=1.0.0
 
-# AI & Embeddings
-anthropic>=0.40.0  # For Claude Sonnet 4.5
-openai>=1.0.0  # Optional: for OpenAI embeddings
+# AI Models (Cost-Effective Options)
+# OpenRouter is included with Agno - no extra package needed!
+google-genai>=0.8.0  # For Gemini direct integration
+openai>=1.0.0  # For embeddings only ($0.02/1M tokens)
+
+# Optional Premium Models (only if offering premium tier)
+# anthropic>=0.40.0  # Uncomment for Claude Sonnet 4.5
 
 # Storage (if not using PgAgentStorage)
 # agno-aws  # Optional: for AWS S3 storage
@@ -585,10 +674,21 @@ npm run build
 - [Agno: The agent framework for Python teams](https://workos.com/blog/agno-the-agent-framework-for-python-teams)
 - [PgVector Agent Knowledge - Agno](https://docs.agno.com/concepts/vectordb/pgvector)
 
-**Claude Sonnet 4.5 (2025)**:
-- [Introducing Claude Sonnet 4.5](https://www.anthropic.com/news/claude-sonnet-4-5) - Anthropic announcement
-- [Claude Models Overview](https://docs.claude.com/en/docs/about-claude/models/overview)
-- [Agno Claude Integration](https://github.com/agno-agi/agno/blob/main/libs/agno/agno/models/anthropic/claude.py)
+**OpenRouter Integration (Primary LLM Provider)**:
+- [OpenRouter - Agno Docs](https://docs.agno.com/concepts/models/openrouter) - Official integration
+- [OpenRouter Models](https://openrouter.ai/models) - Model catalog & pricing
+- [OpenRouter Pricing](https://openrouter.ai/pricing) - Cost structure
+- [Top AI Models on OpenRouter 2025](https://www.teamday.ai/blog/top-ai-models-openrouter-2025) - Cost vs performance
+- [OpenRouter Review 2025](https://skywork.ai/blog/openrouter-review-2025/) - Production testing
+
+**Google Gemini Integration**:
+- [Gemini - Agno Docs](https://docs.agno.com/tools/toolkits/models/gemini) - Official integration
+- [Using Agno with Google Gemini and PgVector](https://www.linkedin.com/posts/devevantelista_using-agno-with-google-gemini-and-pgvector-activity-7303258024289210368-1pmD) - Real-world example
+
+**Model Recommendations for RAG**:
+- Qwen3-Max: Optimized for RAG, $1.2/$6 per 1M tokens
+- Gemini 2.5 Flash: Price-performance leader for production
+- Qwen3-Coder (Free): Development & free tier
 
 **Implementation Guides**:
 - [Agentic RAG with Hybrid Search - Agno](https://docs.agno.com/examples/apps/agentic-rag)
@@ -596,4 +696,4 @@ npm run build
 - [Agentic Framework Deep Dive: Agno](https://medium.com/@devipriyakaruppiah/agentic-framework-deep-dive-series-part-2-agno-c45da579b7c0)
 - [RAG for Data Engineers with Agno & PgVector](https://thepipeandtheline.substack.com/p/introduction-to-rag-hands-on-implementation)
 
-**Last Updated**: 2025-11-23 (with Agno v2.3.1 & Claude Sonnet 4.5)
+**Last Updated**: 2025-11-23 (Agno v2.3.1, OpenRouter primary, cost-optimized)
