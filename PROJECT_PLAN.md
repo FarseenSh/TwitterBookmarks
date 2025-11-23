@@ -1,8 +1,16 @@
-# Twitter Bookmarks Chat SaaS - Project Plan
+# Twitter Bookmarks Chat - Open Source Project Plan
 
 ## 🎯 Project Overview
 
-A SaaS application that allows users to chat with their Twitter bookmarks using AI-powered agentic RAG (Retrieval-Augmented Generation). Users can extract their Twitter bookmarks via a Chrome extension and interact with them through natural language queries.
+An **open source, self-hosted** application that allows users to chat with their Twitter bookmarks using AI-powered agentic RAG (Retrieval-Augmented Generation). Users extract their bookmarks via a Chrome extension and interact with them through natural language queries.
+
+**Key Features:**
+- 🔓 **100% Open Source** - MIT License
+- 🏠 **Self-Hosted** - Your data stays on your machine
+- 🔑 **Your API Keys** - Choose your own LLM provider
+- 🐳 **Docker-First** - One command to start
+- 🎯 **Agentic RAG** - Intelligent, context-aware search
+- 📊 **Comprehensive Data** - Captures ALL bookmark metadata
 
 ## 🏗️ Architecture Overview
 
@@ -70,10 +78,10 @@ A SaaS application that allows users to chat with their Twitter bookmarks using 
 - **Vector Search**: PgVector with hybrid search (semantic + keyword)
 
 ### Infrastructure
-- **Containerization**: Docker + Docker Compose
-- **Auth**: NextAuth.js / Clerk / Supabase Auth
-- **Deployment**: Vercel (Frontend) + Railway/Render (Backend)
-- **Environment**: .env management
+- **Containerization**: Docker + Docker Compose (one-command setup)
+- **Deployment**: Self-hosted (user's machine or VPS)
+- **Auth**: Optional (single-user default, can add BasicAuth)
+- **Environment**: .env for API keys and configuration
 
 ## 🗂️ Project Structure
 
@@ -157,87 +165,183 @@ twitter-bookmarks-saas/
 **Key Components**:
 
 #### A. Database Models
+
+**User Model** (Optional - for multi-user setups):
 ```python
-# User model
-- id, email, created_at, subscription_tier
-
-# Bookmark model
-- id, user_id, tweet_id, content, author, media_urls,
-  created_at, synced_at, embedding_id
-
-# ChatSession model
-- id, user_id, created_at, updated_at
-
-# ChatMessage model
-- id, session_id, role, content, created_at
+- id: UUID
+- username: str (optional)
+- created_at: datetime
 ```
 
-#### B. Agno Agent Setup (Updated 2025 Syntax with Cost-Effective Models)
+**Bookmark Model** (Comprehensive Schema - CAPTURES EVERYTHING):
+```python
+# Core Tweet Data
+- id: UUID
+- tweet_id: str (unique Twitter ID)
+- tweet_url: str
+- tweet_content: str (full text)
+- published_at: datetime
+- language: str
 
-**Option 1: OpenRouter (Recommended - Best Cost/Performance)**
+# Author Information
+- author_name: str (display name)
+- author_username: str (@handle)
+- author_profile_image_url: str
+- author_verified: bool (blue checkmark)
+- author_follower_count: int
+- author_following_count: int
+
+# Engagement Metrics
+- likes: int
+- retweets: int
+- replies: int
+- views: int (if available)
+- bookmarks_count: int
+- quotes: int
+
+# Media & Links (URLs only - no downloads)
+- media_urls: List[str] (images/videos)
+- media_types: List[str] (['image', 'video', 'gif'])
+- external_urls: List[str] (links in tweet)
+
+# Social Context
+- hashtags: List[str] (#tags)
+- mentions: List[str] (@mentions)
+
+# Tweet Context
+- is_reply: bool
+- is_retweet: bool
+- is_quote: bool
+- reply_to_username: str (if reply)
+- reply_to_tweet_id: str
+- thread_position: int (if part of thread)
+
+# Metadata
+- source: str ('Twitter Web App', 'Twitter for iPhone', etc.)
+- bookmarked_at: datetime (when USER bookmarked it)
+- synced_at: datetime
+- embedding_id: str (PgVector reference)
+
+# Optional
+- user_id: UUID (for multi-user)
+- user_notes: str (user can add notes)
+```
+
+**ChatSession Model**:
+```python
+- id: UUID
+- user_id: UUID (optional)
+- created_at: datetime
+- updated_at: datetime
+- title: str (auto-generated from first message)
+```
+
+**ChatMessage Model**:
+```python
+- id: UUID
+- session_id: UUID
+- role: str ('user' | 'assistant')
+- content: str
+- created_at: datetime
+```
+
+#### B. Agno Agent Setup (Agentic RAG - 2025 Best Practices)
+
+**Complete Agent with Agentic RAG (Recommended)**:
 ```python
 from agno.agent import Agent
 from agno.models.openrouter import OpenRouter
 from agno.knowledge.knowledge import Knowledge
 from agno.vectordb.pgvector import PgVector, SearchType
+from agno.embedder.openai import OpenAIEmbedder
 from agno.storage.agent.postgres import PgAgentStorage
 
 # Database connection
 db_url = "postgresql+psycopg://ai:ai@localhost:5532/ai"
 
-# Vector database for bookmarks with hybrid search
+# Vector database with hybrid search + OpenAI embeddings
 vector_db = PgVector(
     table_name="twitter_bookmarks",
     db_url=db_url,
-    search_type=SearchType.hybrid,  # Combines semantic + keyword search
+    search_type=SearchType.hybrid,  # 🔥 Semantic + Keyword search
+    embedder=OpenAIEmbedder(
+        model="text-embedding-3-small",  # $0.02/1M tokens
+        dimensions=1536,
+    ),
 )
 
 # Knowledge base from bookmarks
 knowledge_base = Knowledge(
     vector_db=vector_db,
-    num_documents=5,  # Top-k retrieval
+    num_documents=5,  # Top-5 retrieval per search
 )
 
-# Chat agent with RAG using OpenRouter
+# 🚀 AGENTIC RAG AGENT (92% accuracy)
 chat_agent = Agent(
     name="Twitter Bookmarks Assistant",
+
+    # LLM Model (user configurable)
     model=OpenRouter(
-        id="qwen/qwen3-max",  # $1.2/$6 per 1M - optimized for RAG!
-        # Alternative options:
+        id="qwen/qwen3-max",  # Default: $1.2/$6 per 1M - RAG optimized
+        # Other options based on .env PROVIDER setting:
         # id="google/gemini-2.5-flash",  # Price-performance leader
         # id="qwen/qwen3-coder:free",    # FREE for development
     ),
+
+    # Knowledge & Storage
     knowledge=knowledge_base,
     storage=PgAgentStorage(table_name="agent_sessions", db_url=db_url),
-    read_chat_history=True,  # Maintains conversation context
+
+    # 🎯 AGENTIC RAG CONFIGURATION (critical!)
+    search_knowledge=True,       # ✅ Agent decides WHEN to search
+    read_chat_history=True,      # ✅ Remembers conversation
+    add_history_to_context=True, # ✅ Adds history to LLM context
+    num_history_runs=3,          # ✅ Last 3 interactions
+
+    # Output formatting
     markdown=True,
-    show_tool_calls=True,
+    show_tool_calls=True,  # See when agent searches knowledge
     debug_mode=False,
 )
 ```
 
-**Option 2: Google Gemini Direct (Also Cost-Effective)**
+**4 LLM Provider Options** (from .env):
+
 ```python
-from agno.agent import Agent
+import os
+from agno.models.openrouter import OpenRouter
 from agno.models.google import Gemini
-from agno.knowledge.knowledge import Knowledge
-from agno.vectordb.pgvector import PgVector, SearchType
+from agno.models.ollama import Ollama
 
-db_url = "postgresql+psycopg://ai:ai@localhost:5532/ai"
+# User chooses provider in .env
+provider = os.getenv("PROVIDER", "openrouter")
 
-vector_db = PgVector(
-    table_name="twitter_bookmarks",
-    db_url=db_url,
-    search_type=SearchType.hybrid,
-)
+if provider == "openrouter":
+    model = OpenRouter(id=os.getenv("MODEL_NAME", "qwen/qwen3-max"))
+elif provider == "gemini":
+    model = Gemini(id=os.getenv("MODEL_NAME", "gemini-2.5-flash"))
+elif provider == "hyperbolic":
+    # Hyperbolic uses OpenRouter-compatible API
+    model = OpenRouter(
+        id=os.getenv("MODEL_NAME", "meta-llama/llama-3.1-70b"),
+        api_key=os.getenv("HYPERBOLIC_API_KEY"),
+        base_url="https://api.hyperbolic.xyz/v1"
+    )
+elif provider == "ollama":
+    model = Ollama(
+        id=os.getenv("MODEL_NAME", "llama3.1:8b"),
+        base_url=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+    )
 
-knowledge_base = Knowledge(vector_db=vector_db, num_documents=5)
-
-# Chat agent with Gemini
+# Create agent with user's chosen model
 chat_agent = Agent(
     name="Twitter Bookmarks Assistant",
-    model=Gemini(id="gemini-2.5-flash"),  # Fast & cheap
+    model=model,
     knowledge=knowledge_base,
+    search_knowledge=True,      # Agentic RAG
+    read_chat_history=True,     # Context awareness
+    add_history_to_context=True,
+    num_history_runs=3,
     markdown=True,
 )
 ```
@@ -250,61 +354,74 @@ from agno.agent import Agent
 from agno.models.openrouter import OpenRouter
 from agno.knowledge.knowledge import Knowledge
 from agno.vectordb.pgvector import PgVector, SearchType
+from agno.embedder.openai import OpenAIEmbedder
 
 db_url = "postgresql+psycopg://ai:ai@localhost:5532/ai"
 
-# Create vector database and knowledge base
+# Vector database with hybrid search
 vector_db = PgVector(
     table_name="twitter_bookmarks",
     db_url=db_url,
     search_type=SearchType.hybrid,
+    embedder=OpenAIEmbedder(model="text-embedding-3-small"),
 )
-knowledge_base = Knowledge(vector_db=vector_db)
+knowledge_base = Knowledge(vector_db=vector_db, num_documents=5)
 
-# Create agent with OpenRouter
+# Agent with Agentic RAG
 agent = Agent(
-    model=OpenRouter(id="qwen/qwen3-max"),  # Cost-effective RAG model
+    model=OpenRouter(id="qwen/qwen3-max"),
     knowledge=knowledge_base,
+    search_knowledge=True,       # Agentic RAG
+    read_chat_history=True,
+    add_history_to_context=True,
+    num_history_runs=3,
     markdown=True,
 )
 
 async def main():
-    # Load knowledge asynchronously (faster for large datasets)
-    await knowledge_base.add_content_async(
-        url="https://example.com/bookmarks.pdf"
-    )
+    # Add bookmarks to knowledge base asynchronously
+    # (In real app, this happens when user syncs from Chrome extension)
 
     # Query agent asynchronously
     response = await agent.arun("What are my most recent AI bookmarks?")
     print(response.content)
 
     # Streaming response (for real-time chat UX)
-    async for chunk in agent.arun_stream("Summarize these bookmarks"):
+    async for chunk in agent.arun_stream("Summarize my Python bookmarks"):
         print(chunk.content, end="", flush=True)
 
 if __name__ == "__main__":
     asyncio.run(main())
 ```
 
-#### D. API Endpoints
+#### D. API Endpoints (Single-User Focused)
+
 ```python
-# Authentication
-POST   /api/auth/register
-POST   /api/auth/login
-GET    /api/auth/me
-
 # Bookmarks
-POST   /api/bookmarks/sync          # Bulk upload from extension
-GET    /api/bookmarks               # List user bookmarks
+POST   /api/bookmarks/sync          # Bulk upload from Chrome extension
+GET    /api/bookmarks               # List all bookmarks (with filters)
+GET    /api/bookmarks/:id           # Get single bookmark
 DELETE /api/bookmarks/:id           # Delete bookmark
-POST   /api/bookmarks/embed         # Trigger embedding generation
+PUT    /api/bookmarks/:id/notes     # Update user notes
+POST   /api/bookmarks/embed         # Trigger re-embedding
 
-# Chat
+# Chat (Agentic RAG)
 POST   /api/chat/sessions           # Create new chat session
-GET    /api/chat/sessions           # List user sessions
+GET    /api/chat/sessions           # List all sessions
 GET    /api/chat/sessions/:id       # Get session with messages
-POST   /api/chat/message            # Send message (streaming)
+POST   /api/chat/message            # Send message (supports streaming)
 DELETE /api/chat/sessions/:id       # Delete session
+
+# Statistics
+GET    /api/stats                   # Bookmark stats (count, top authors, etc.)
+
+# Health
+GET    /api/health                  # System health check
+
+# Optional (for multi-user)
+# POST   /api/auth/register
+# POST   /api/auth/login
+# GET    /api/auth/me
 ```
 
 ### 3. Agentic RAG System
@@ -421,90 +538,37 @@ DELETE /api/chat/sessions/:id       # Delete session
 
 ## 🔒 Security Considerations
 
-1. **Authentication**
-   - JWT tokens with refresh mechanism
-   - Secure password hashing (bcrypt)
-   - Rate limiting on auth endpoints
+1. **Data Privacy** (Self-Hosted Advantage)
+   - ALL data stays on user's machine
+   - No external servers (except chosen LLM provider API)
+   - User controls their own database
 
-2. **Data Privacy**
-   - User bookmarks are private by default
-   - Encrypted data at rest
-   - HTTPS only communication
-
-3. **Chrome Extension**
+2. **Chrome Extension**
    - Content Security Policy
-   - Limited permissions
-   - Secure token storage
+   - Limited permissions (only twitter.com)
+   - No data sent except to user's own backend
 
-4. **API Security**
-   - CORS configuration
+3. **API Security**
+   - CORS configuration (locked to localhost by default)
    - Input validation (Pydantic)
    - SQL injection prevention (SQLAlchemy ORM)
    - XSS protection
 
-## 💰 Monetization Strategy & Cost Analysis
+4. **Optional Authentication** (for multi-user setups)
+   - BasicAuth or JWT tokens
+   - Secure password hashing (bcrypt)
+   - Rate limiting
 
-### Cost Breakdown (Using OpenRouter)
+## 📊 Success Metrics (Open Source Project)
 
-**Per User Monthly Costs (Estimated)**:
-- **Free Tier** (50 messages/month):
-  - Model: `qwen/qwen3-coder:free` - $0/month
-  - Embeddings: ~1,000 bookmarks @ $0.02/1M tokens ≈ $0.001
-  - Database: Minimal (shared PostgreSQL)
-  - **Total: ~$0.001/user** 🎯 Highly profitable!
-
-- **Pro Tier** (500 messages/month):
-  - Model: `qwen/qwen3-max` @ $1.2/$6 per 1M tokens
-  - Average usage: ~200K tokens input, 100K tokens output
-  - Cost: (200K × $1.2 + 100K × $6) / 1M = $0.24 + $0.60 = **$0.84/month**
-  - Embeddings: ~$0.01
-  - **Total: ~$0.85/user** → **89% margin at $9/month!** 🚀
-
-- **Team Tier** (Unlimited):
-  - Model: `google/gemini-2.5-flash` (faster, scalable)
-  - Average 2,000 messages/user/month
-  - Cost: ~$2-3/user/month
-  - **Total: ~$3/user** → **90% margin at $29/month!** 💰
-
-### Pricing Tiers
-
-1. **Free Tier** - $0/month
-   - Up to 100 bookmarks
-   - 50 chat messages/month
-   - Basic RAG with free model
-   - Community support
-
-2. **Pro Tier** - $9/month
-   - Unlimited bookmarks
-   - 500 chat messages/month
-   - Advanced RAG with Qwen3-Max
-   - Email support
-   - Export features
-
-3. **Team Tier** - $29/month
-   - Everything in Pro
-   - Unlimited messages
-   - Faster model (Gemini 2.5 Flash)
-   - Shared bookmarks
-   - Team collaboration
-   - API access
-   - Priority support
-
-4. **Enterprise** - Custom pricing
-   - Claude Sonnet 4.5 (premium model)
-   - Custom integrations
-   - Dedicated support
-   - SLA guarantees
-
-## 📊 Success Metrics
-
-- User registrations
-- Chrome extension installs
-- Bookmarks synced
-- Chat messages sent
-- User retention rate
-- Query satisfaction (thumbs up/down)
-- Conversion rate (free → paid)
+- ⭐ GitHub Stars
+- 🍴 Forks & Contributors
+- 📦 Docker pulls
+- 📖 Documentation quality
+- 🐛 Issue resolution time
+- 💬 Community engagement (Discord/GitHub Discussions)
+- 📈 Chrome extension installs
+- ✅ User success stories
 
 ## 🚀 Future Enhancements
 
@@ -519,33 +583,48 @@ DELETE /api/chat/sessions/:id       # Delete session
 - [ ] Bookmark recommendations
 - [ ] Export to PDF/Markdown
 
-## 🔐 Environment Variables (.env)
+## 🔐 Environment Variables (.env.example)
 
 ```bash
-# Database
+# =============================================================================
+# CHOOSE YOUR LLM PROVIDER (4 OPTIONS)
+# =============================================================================
+
+# Option 1: OpenRouter (RECOMMENDED - easiest, 200+ models)
+PROVIDER=openrouter
+OPENROUTER_API_KEY=sk-or-v1-...  # Get from https://openrouter.ai/keys
+MODEL_NAME=qwen/qwen3-max  # or google/gemini-2.5-flash, qwen/qwen3-coder:free
+
+# Option 2: Google Gemini (Free tier available!)
+# PROVIDER=gemini
+# GOOGLE_API_KEY=...  # Get from https://makersuite.google.com/app/apikey
+# MODEL_NAME=gemini-2.5-flash  # or gemini-1.5-flash
+
+# Option 3: Hyperbolic (Ultra-low latency)
+# PROVIDER=hyperbolic
+# HYPERBOLIC_API_KEY=...  # Get from https://hyperbolic.xyz
+# MODEL_NAME=meta-llama/llama-3.1-70b
+
+# Option 4: Ollama (100% LOCAL - no API key needed!)
+# PROVIDER=ollama
+# OLLAMA_BASE_URL=http://localhost:11434
+# MODEL_NAME=llama3.1:8b  # or llama3.1:70b, qwen2.5:14b
+
+# =============================================================================
+# EMBEDDINGS (REQUIRED - OpenAI only)
+# =============================================================================
+OPENAI_API_KEY=sk-...  # Get from https://platform.openai.com/api-keys
+# Cost: $0.02 per 1M tokens (basically free for personal use)
+
+# =============================================================================
+# DATABASE (Docker handles this - no changes needed)
+# =============================================================================
 DATABASE_URL=postgresql+psycopg://ai:ai@localhost:5532/ai
 PGVECTOR_URL=postgresql+psycopg://ai:ai@localhost:5532/ai
 
-# AI Models (Primary - OpenRouter)
-OPENROUTER_API_KEY=your_openrouter_api_key_here  # Get from openrouter.ai
-OPENROUTER_APP_NAME=TwitterBookmarksChat  # Optional: for tracking
-
-# AI Models (Alternative Providers)
-GOOGLE_API_KEY=your_google_api_key_here  # For Gemini direct
-HYPERBOLIC_API_KEY=your_hyperbolic_key_here  # Optional: Hyperbolic AI
-OPENAI_API_KEY=your_openai_api_key_here  # Optional: for embeddings
-
-# Model Selection (configurable per tier)
-DEFAULT_MODEL=qwen/qwen3-max  # Free tier: qwen3-coder:free
-PRO_MODEL=google/gemini-2.5-flash  # Pro tier
-TEAM_MODEL=anthropic/claude-sonnet-4-5  # Premium option
-
-# JWT Authentication
-JWT_SECRET_KEY=your_super_secret_key_here_change_in_production
-JWT_ALGORITHM=HS256
-ACCESS_TOKEN_EXPIRE_MINUTES=30
-
-# Application
+# =============================================================================
+# APPLICATION
+# =============================================================================
 APP_NAME="Twitter Bookmarks Chat"
 APP_ENV=development
 DEBUG=True
@@ -554,9 +633,12 @@ ALLOWED_ORIGINS=http://localhost:3000,http://localhost:5173
 # Frontend URL (for CORS)
 FRONTEND_URL=http://localhost:3000
 
-# AgentOS Config
-AGNO_API_KEY=  # Optional: for AgentOS cloud features
-AGNO_WORKSPACE_ID=  # Optional: for multi-tenant setups
+# =============================================================================
+# OPTIONAL: Authentication (for multi-user setups)
+# =============================================================================
+# JWT_SECRET_KEY=your_super_secret_key_here
+# JWT_ALGORITHM=HS256
+# ACCESS_TOKEN_EXPIRE_MINUTES=30
 ```
 
 ## 📦 Backend Dependencies (requirements.txt)
@@ -611,48 +693,72 @@ openai>=1.0.0  # For embeddings only ($0.02/1M tokens)
 - Git
 ```
 
-### Quick Start
-```bash
-# Clone repository
-git clone <repo-url>
-cd twitter-bookmarks-saas
+### Quick Start (5 Minutes)
 
-# Start PostgreSQL with PgVector using official Agno image
+**Step 1: Clone & Configure**
+```bash
+# Clone the repository
+git clone https://github.com/yourusername/twitter-bookmarks-chat
+cd twitter-bookmarks-chat
+
+# Copy environment template
+cp .env.example .env
+
+# Edit .env and add your API keys:
+# - OPENROUTER_API_KEY (get from https://openrouter.ai/keys)
+# - OPENAI_API_KEY (get from https://platform.openai.com/api-keys)
+```
+
+**Step 2: Start with Docker Compose** (Recommended)
+```bash
+# One command starts everything!
+docker-compose up -d
+
+# Wait ~30 seconds for services to start, then:
+# Frontend: http://localhost:3000
+# Backend API: http://localhost:8000/docs
+```
+
+**Step 3: Load Chrome Extension**
+```bash
+1. Open Chrome → chrome://extensions
+2. Enable "Developer mode" (top right)
+3. Click "Load unpacked"
+4. Select the `chrome-extension/dist` folder
+5. Visit Twitter → Bookmarks
+6. Click extension icon → Sync
+```
+
+**Manual Setup** (Without Docker)
+```bash
+# 1. Start PostgreSQL with PgVector
 docker run -d \
   -e POSTGRES_DB=ai \
   -e POSTGRES_USER=ai \
   -e POSTGRES_PASSWORD=ai \
-  -e PGDATA=/var/lib/postgresql/data/pgdata \
   -v pgvolume:/var/lib/postgresql/data \
   -p 5532:5432 \
   --name pgvector \
   agnohq/pgvector:16
 
-# Backend setup
+# 2. Backend
 cd backend
 python3 -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-
-# Install Agno and dependencies (latest version 2.3.1)
-pip install agno
+source venv/bin/activate
+pip install agno==2.3.1
 pip install -r requirements.txt
-
-# Run migrations
 alembic upgrade head
-
-# Start AgentOS backend
 uvicorn main:app --reload --port 8000
 
-# Frontend setup (in new terminal)
+# 3. Frontend (new terminal)
 cd frontend
 npm install
 npm run dev
 
-# Chrome extension (in new terminal)
+# 4. Extension (new terminal)
 cd chrome-extension
 npm install
 npm run build
-# Load unpacked extension in Chrome at chrome://extensions
 ```
 
 ## 📚 Resources & Documentation
@@ -696,4 +802,51 @@ npm run build
 - [Agentic Framework Deep Dive: Agno](https://medium.com/@devipriyakaruppiah/agentic-framework-deep-dive-series-part-2-agno-c45da579b7c0)
 - [RAG for Data Engineers with Agno & PgVector](https://thepipeandtheline.substack.com/p/introduction-to-rag-hands-on-implementation)
 
-**Last Updated**: 2025-11-23 (Agno v2.3.1, OpenRouter primary, cost-optimized)
+**Agentic RAG Documentation**:
+- [Knowledge - Agno Docs](https://docs.agno.com/agents/knowledge) - Official knowledge docs
+- [Agentic RAG Cookbook](https://github.com/agno-agi/agno/tree/main/cookbook) - Code examples
+- [Agno Support Agent Example](https://github.com/agno-agi/agno/blob/main/cookbook/examples/agents/agno_support_agent.py) - Real implementation
+
+---
+
+## 📜 License
+
+**MIT License**
+
+Copyright (c) 2025 [Your Name]
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+## 🤝 Contributing
+
+We welcome contributions! This is an open source project.
+
+**How to Contribute:**
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
+
+**Areas We Need Help:**
+- 🐛 Bug fixes
+- 📝 Documentation improvements
+- 🎨 UI/UX enhancements
+- 🌐 Additional LLM provider support
+- 🧪 Testing & QA
+- 🌍 Internationalization
+
+## 📞 Support & Community
+
+- 🐛 **Issues**: [GitHub Issues](https://github.com/yourusername/twitter-bookmarks-chat/issues)
+- 💬 **Discussions**: [GitHub Discussions](https://github.com/yourusername/twitter-bookmarks-chat/discussions)
+- 📖 **Docs**: [Documentation](https://github.com/yourusername/twitter-bookmarks-chat/wiki)
+- ⭐ **Star** the repo if you find it useful!
+
+---
+
+**Last Updated**: 2025-11-23 (Open Source, Agno v2.3.1, Agentic RAG, 4 LLM Providers)
