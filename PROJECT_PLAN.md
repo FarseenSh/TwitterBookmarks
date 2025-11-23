@@ -51,7 +51,7 @@ An **open source, self-hosted** application that allows users to chat with their
 
 ### Backend
 - **Framework**: Agno AgentOS (FastAPI)
-- **Agent Framework**: Agno v2.3.1 (latest - Nov 2025)
+- **Agent Framework**: Agno v2.3.2 (latest - Nov 22, 2025)
 - **Language**: Python 3.10+ (required by Agno)
 - **API**: RESTful + WebSocket for streaming
 
@@ -62,10 +62,10 @@ An **open source, self-hosted** application that allows users to chat with their
 - **Migrations**: Alembic
 
 ### AI & RAG
-- **Agent Framework**: Agno v2.3.1
+- **Agent Framework**: Agno v2.3.2 (Nov 22, 2025)
 - **Primary LLM Provider**: OpenRouter (unified access to multiple models)
 - **Recommended Models** (cost-effective for RAG):
-  - `qwen/qwen3-max` - $1.2/$6 per 1M tokens (optimized for RAG!)
+  - `qwen/qwen3-max` - $1.60/$6.40 per 1M tokens (optimized for RAG!)
   - `google/gemini-2.5-flash` - Price-performance leader
   - `qwen/qwen3-coder:free` - FREE tier for development
   - `google/gemini-1.5-flash` - Google Gemini (budget-friendly)
@@ -282,7 +282,7 @@ chat_agent = Agent(
 
     # LLM Model (user configurable)
     model=OpenRouter(
-        id="qwen/qwen3-max",  # Default: $1.2/$6 per 1M - RAG optimized
+        id="qwen/qwen3-max",  # Default: $1.60/$6.40 per 1M - RAG optimized
         # Other options based on .env PROVIDER setting:
         # id="google/gemini-2.5-flash",  # Price-performance leader
         # id="qwen/qwen3-coder:free",    # FREE for development
@@ -644,8 +644,8 @@ FRONTEND_URL=http://localhost:3000
 ## 📦 Backend Dependencies (requirements.txt)
 
 ```txt
-# Agno Framework (Latest - Nov 2025)
-agno==2.3.1
+# Agno Framework (Latest - Nov 22, 2025)
+agno==2.3.2
 
 # Web Framework
 fastapi>=0.104.0
@@ -686,7 +686,7 @@ openai>=1.0.0  # For embeddings only ($0.02/1M tokens)
 
 ### Prerequisites
 ```bash
-- Python 3.10+ (required by Agno 2.3.1)
+- Python 3.10+ (required by Agno 2.3.2)
 - Node.js 20+ LTS
 - PostgreSQL 15+ with PgVector extension
 - Docker & Docker Compose
@@ -745,7 +745,7 @@ docker run -d \
 cd backend
 python3 -m venv venv
 source venv/bin/activate
-pip install agno==2.3.1
+pip install agno==2.3.2
 pip install -r requirements.txt
 alembic upgrade head
 uvicorn main:app --reload --port 8000
@@ -792,8 +792,8 @@ npm run build
 - [Using Agno with Google Gemini and PgVector](https://www.linkedin.com/posts/devevantelista_using-agno-with-google-gemini-and-pgvector-activity-7303258024289210368-1pmD) - Real-world example
 
 **Model Recommendations for RAG**:
-- Qwen3-Max: Optimized for RAG, $1.2/$6 per 1M tokens
-- Gemini 2.5 Flash: Price-performance leader for production
+- Qwen3-Max: Optimized for RAG, $1.60/$6.40 per 1M tokens (Nov 2025 pricing)
+- Gemini 2.5 Flash: Price-performance leader for production (GA since May 2025)
 - Qwen3-Coder (Free): Development & free tier
 
 **Implementation Guides**:
@@ -849,4 +849,4 @@ We welcome contributions! This is an open source project.
 
 ---
 
-**Last Updated**: 2025-11-23 (Open Source, Agno v2.3.1, Agentic RAG, 4 LLM Providers)
+**Last Updated**: 2025-11-23 (Open Source, Agno v2.3.2, Agentic RAG, 4 LLM Providers, Nov 2025 verified)
