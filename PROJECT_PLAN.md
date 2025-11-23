@@ -43,8 +43,8 @@ A SaaS application that allows users to chat with their Twitter bookmarks using 
 
 ### Backend
 - **Framework**: Agno AgentOS (FastAPI)
-- **Agent Framework**: Agno (v0.x)
-- **Language**: Python 3.11+
+- **Agent Framework**: Agno v2.3.1 (latest - Nov 2025)
+- **Language**: Python 3.10+ (required by Agno)
 - **API**: RESTful + WebSocket for streaming
 
 ### Database
@@ -54,11 +54,12 @@ A SaaS application that allows users to chat with their Twitter bookmarks using 
 - **Migrations**: Alembic
 
 ### AI & RAG
-- **Agent Framework**: Agno
-- **LLM Provider**: OpenAI GPT-4 / Anthropic Claude / Groq
-- **Embeddings**: OpenAI text-embedding-3-small
-- **RAG**: Agno's built-in agentic RAG
-- **Vector Search**: PgVector with hybrid search
+- **Agent Framework**: Agno v2.3.1
+- **LLM Provider**: Anthropic Claude Sonnet 4.5 (primary) / OpenAI / Groq
+- **Model**: claude-sonnet-4-5 (latest, Sep 2025 - best for coding & agents)
+- **Embeddings**: OpenAI text-embedding-3-small or Anthropic embeddings
+- **RAG**: Agno's built-in agentic RAG (automatic when knowledge is provided)
+- **Vector Search**: PgVector with hybrid search (semantic + keyword)
 
 ### Infrastructure
 - **Containerization**: Docker + Docker Compose
@@ -163,37 +164,88 @@ twitter-bookmarks-saas/
 - id, session_id, role, content, created_at
 ```
 
-#### B. Agno Agent Setup
+#### B. Agno Agent Setup (Updated 2025 Syntax)
 ```python
-from agno import Agent
-from agno.knowledge.database import PgVectorDb
-from agno.models.openai import OpenAIChat
+from agno.agent import Agent
+from agno.models.anthropic import Claude
+from agno.knowledge.knowledge import Knowledge
+from agno.vectordb.pgvector import PgVector, SearchType
+from agno.storage.agent.postgres import PgAgentStorage
 
-# Vector database for bookmarks
-vector_db = PgVectorDb(
-    table_name="twitter_bookmarks_embeddings",
-    db_url="postgresql://...",
+# Database connection
+db_url = "postgresql+psycopg://ai:ai@localhost:5532/ai"
+
+# Vector database for bookmarks with hybrid search
+vector_db = PgVector(
+    table_name="twitter_bookmarks",
+    db_url=db_url,
+    search_type=SearchType.hybrid,  # Combines semantic + keyword search
 )
 
 # Knowledge base from bookmarks
-knowledge_base = VectorKnowledge(
+knowledge_base = Knowledge(
     vector_db=vector_db,
     num_documents=5,  # Top-k retrieval
 )
 
-# Chat agent with RAG
+# Chat agent with RAG using Claude Sonnet 4.5
 chat_agent = Agent(
     name="Twitter Bookmarks Assistant",
-    model=OpenAIChat(model="gpt-4-turbo"),
+    model=Claude(id="claude-sonnet-4-5"),  # Latest model (Sep 2025)
     knowledge=knowledge_base,
-    memory=True,  # Enable conversation memory
-    storage=SqliteDb("agno.db"),  # Session persistence
+    storage=PgAgentStorage(table_name="agent_sessions", db_url=db_url),
+    read_chat_history=True,  # Maintains conversation context
     markdown=True,
     show_tool_calls=True,
+    debug_mode=False,
 )
 ```
 
-#### C. API Endpoints
+#### C. Advanced: Async Agent Usage (Recommended for Production)
+
+```python
+import asyncio
+from agno.agent import Agent
+from agno.models.anthropic import Claude
+from agno.knowledge.knowledge import Knowledge
+from agno.vectordb.pgvector import PgVector, SearchType
+
+db_url = "postgresql+psycopg://ai:ai@localhost:5532/ai"
+
+# Create vector database and knowledge base
+vector_db = PgVector(
+    table_name="twitter_bookmarks",
+    db_url=db_url,
+    search_type=SearchType.hybrid,
+)
+knowledge_base = Knowledge(vector_db=vector_db)
+
+# Create agent
+agent = Agent(
+    model=Claude(id="claude-sonnet-4-5"),
+    knowledge=knowledge_base,
+    markdown=True,
+)
+
+async def main():
+    # Load knowledge asynchronously (faster for large datasets)
+    await knowledge_base.add_content_async(
+        url="https://example.com/bookmarks.pdf"
+    )
+
+    # Query agent asynchronously
+    response = await agent.arun("What are my most recent AI bookmarks?")
+    print(response.content)
+
+    # Streaming response (for real-time chat UX)
+    async for chunk in agent.arun_stream("Summarize these bookmarks"):
+        print(chunk.content, end="", flush=True)
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+#### D. API Endpoints
 ```python
 # Authentication
 POST   /api/auth/register
@@ -392,13 +444,80 @@ DELETE /api/chat/sessions/:id       # Delete session
 - [ ] Bookmark recommendations
 - [ ] Export to PDF/Markdown
 
+## 🔐 Environment Variables (.env)
+
+```bash
+# Database
+DATABASE_URL=postgresql+psycopg://ai:ai@localhost:5532/ai
+PGVECTOR_URL=postgresql+psycopg://ai:ai@localhost:5532/ai
+
+# AI Models
+ANTHROPIC_API_KEY=your_anthropic_api_key_here
+OPENAI_API_KEY=your_openai_api_key_here  # Optional: for embeddings
+
+# JWT Authentication
+JWT_SECRET_KEY=your_super_secret_key_here_change_in_production
+JWT_ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=30
+
+# Application
+APP_NAME="Twitter Bookmarks Chat"
+APP_ENV=development
+DEBUG=True
+ALLOWED_ORIGINS=http://localhost:3000,http://localhost:5173
+
+# Frontend URL (for CORS)
+FRONTEND_URL=http://localhost:3000
+
+# AgentOS Config
+AGNO_API_KEY=  # Optional: for AgentOS cloud features
+AGNO_WORKSPACE_ID=  # Optional: for multi-tenant setups
+```
+
+## 📦 Backend Dependencies (requirements.txt)
+
+```txt
+# Agno Framework (Latest - Nov 2025)
+agno==2.3.1
+
+# Web Framework
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+
+# Database
+sqlalchemy>=2.0.0
+alembic>=1.12.0
+psycopg[binary]>=3.1.0  # PostgreSQL driver
+pgvector>=0.2.0
+
+# Authentication & Security
+pyjwt>=2.8.0
+passlib[bcrypt]>=1.7.4
+python-multipart>=0.0.6
+
+# Environment & Config
+python-dotenv>=1.0.0
+pydantic>=2.5.0
+pydantic-settings>=2.1.0
+
+# CORS & Middleware
+python-cors>=1.0.0
+
+# AI & Embeddings
+anthropic>=0.40.0  # For Claude Sonnet 4.5
+openai>=1.0.0  # Optional: for OpenAI embeddings
+
+# Storage (if not using PgAgentStorage)
+# agno-aws  # Optional: for AWS S3 storage
+```
+
 ## 🛠️ Development Setup
 
 ### Prerequisites
 ```bash
-- Python 3.11+
-- Node.js 18+
-- PostgreSQL 15+
+- Python 3.10+ (required by Agno 2.3.1)
+- Node.js 20+ LTS
+- PostgreSQL 15+ with PgVector extension
 - Docker & Docker Compose
 - Git
 ```
@@ -409,27 +528,42 @@ DELETE /api/chat/sessions/:id       # Delete session
 git clone <repo-url>
 cd twitter-bookmarks-saas
 
-# Start PostgreSQL with PgVector
-docker-compose up -d postgres
+# Start PostgreSQL with PgVector using official Agno image
+docker run -d \
+  -e POSTGRES_DB=ai \
+  -e POSTGRES_USER=ai \
+  -e POSTGRES_PASSWORD=ai \
+  -e PGDATA=/var/lib/postgresql/data/pgdata \
+  -v pgvolume:/var/lib/postgresql/data \
+  -p 5532:5432 \
+  --name pgvector \
+  agnohq/pgvector:16
 
 # Backend setup
 cd backend
-python -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-alembic upgrade head
-uvicorn main:app --reload
+python3 -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
 
-# Frontend setup
-cd ../frontend
+# Install Agno and dependencies (latest version 2.3.1)
+pip install agno
+pip install -r requirements.txt
+
+# Run migrations
+alembic upgrade head
+
+# Start AgentOS backend
+uvicorn main:app --reload --port 8000
+
+# Frontend setup (in new terminal)
+cd frontend
 npm install
 npm run dev
 
-# Chrome extension
-cd ../chrome-extension
+# Chrome extension (in new terminal)
+cd chrome-extension
 npm install
 npm run build
-# Load unpacked extension in Chrome
+# Load unpacked extension in Chrome at chrome://extensions
 ```
 
 ## 📚 Resources & Documentation
@@ -442,11 +576,24 @@ npm run build
 
 ---
 
-**Sources**:
-- [GitHub - agno-agi/agno](https://github.com/agno-agi/agno)
-- [Agno: The agent framework for Python teams](https://workos.com/blog/agno-the-agent-framework-for-python-teams)
-- [Agentic RAG with Agent UI - Agno](https://docs.agno.com/examples/concepts/rag/agentic-rag-agent-ui)
-- [Performing Agentic RAG with MongoDB and Agno](https://medium.com/@sharathpai107/performing-agentic-rag-with-mongodb-and-agno-010ceef5141b)
-- [Agentic Framework Deep Dive Series (Part 2): Agno](https://medium.com/@devipriyakaruppiah/agentic-framework-deep-dive-series-part-2-agno-c45da579b7c0)
+## 📚 Sources & References
 
-**Last Updated**: 2025-11-23
+**Agno Framework (2025)**:
+- [GitHub - agno-agi/agno](https://github.com/agno-agi/agno) - Main repository
+- [Agno PyPI Package](https://pypi.org/project/agno/) - v2.3.1 (latest)
+- [Agno Documentation](https://docs.agno.com/) - Official docs
+- [Agno: The agent framework for Python teams](https://workos.com/blog/agno-the-agent-framework-for-python-teams)
+- [PgVector Agent Knowledge - Agno](https://docs.agno.com/concepts/vectordb/pgvector)
+
+**Claude Sonnet 4.5 (2025)**:
+- [Introducing Claude Sonnet 4.5](https://www.anthropic.com/news/claude-sonnet-4-5) - Anthropic announcement
+- [Claude Models Overview](https://docs.claude.com/en/docs/about-claude/models/overview)
+- [Agno Claude Integration](https://github.com/agno-agi/agno/blob/main/libs/agno/agno/models/anthropic/claude.py)
+
+**Implementation Guides**:
+- [Agentic RAG with Hybrid Search - Agno](https://docs.agno.com/examples/apps/agentic-rag)
+- [Performing Agentic RAG with MongoDB and Agno](https://medium.com/@sharathpai107/performing-agentic-rag-with-mongodb-and-agno-010ceef5141b)
+- [Agentic Framework Deep Dive: Agno](https://medium.com/@devipriyakaruppiah/agentic-framework-deep-dive-series-part-2-agno-c45da579b7c0)
+- [RAG for Data Engineers with Agno & PgVector](https://thepipeandtheline.substack.com/p/introduction-to-rag-hands-on-implementation)
+
+**Last Updated**: 2025-11-23 (with Agno v2.3.1 & Claude Sonnet 4.5)
